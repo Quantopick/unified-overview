@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { formatCurrency } from '@/lib/api';
 import type { ClientPnL } from '@/lib/api';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface TopPnLClientsProps {
   data: ClientPnL[];
@@ -7,6 +9,8 @@ interface TopPnLClientsProps {
 }
 
 const TopPnLClients = ({ data, loading }: TopPnLClientsProps) => {
+  const [hoveredLogin, setHoveredLogin] = useState<number | null>(null);
+
   const winners = data.filter(c => c.pnl > 0).slice(0, 8);
   const losers = [...data].filter(c => c.pnl < 0).sort((a, b) => a.pnl - b.pnl).slice(0, 8);
 
@@ -16,68 +20,74 @@ const TopPnLClients = ({ data, loading }: TopPnLClientsProps) => {
     1
   );
 
-  const renderClient = (client: ClientPnL, type: 'winner' | 'loser') => {
+  const renderClient = (client: ClientPnL, type: 'winner' | 'loser', idx: number) => {
     const barWidth = Math.min((Math.abs(client.pnl) / maxAbsPnl) * 100, 100);
+    const isHovered = hoveredLogin === client.login;
     return (
-      <div key={client.login} className="flex items-center gap-3 py-1.5 px-3 hover:bg-accent/40 transition-colors rounded">
+      <div
+        key={client.login}
+        onMouseEnter={() => setHoveredLogin(client.login)}
+        onMouseLeave={() => setHoveredLogin(null)}
+        className={`flex items-center gap-3 py-2 px-4 cursor-default transition-all duration-200 rounded-lg mx-2 ${
+          isHovered ? 'bg-accent/60 scale-[1.01]' : 'hover:bg-accent/30'
+        }`}
+        style={{ animationDelay: `${idx * 60}ms` }}
+      >
+        {/* Rank */}
+        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+          idx === 0 ? (type === 'winner' ? 'bg-profit/20 text-profit' : 'bg-loss/20 text-loss') : 'bg-secondary text-muted-foreground'
+        }`}>
+          {idx + 1}
+        </div>
+
         <div className="w-14 shrink-0">
           <span className="font-mono text-[11px] text-muted-foreground">{client.login}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[11px] text-foreground truncate">{client.name || '—'}</div>
-          <div className="mt-0.5 h-1 rounded-full bg-muted overflow-hidden">
+          <div className="text-[11px] text-foreground truncate font-medium">{client.name || '—'}</div>
+          <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all ${type === 'winner' ? 'bg-profit' : 'bg-loss'}`}
-              style={{ width: `${barWidth}%` }}
+              className={`h-full rounded-full bar-animated ${type === 'winner' ? 'bg-profit' : 'bg-loss'}`}
+              style={{ width: `${barWidth}%`, animationDelay: `${idx * 80}ms` }}
             />
           </div>
         </div>
-        <div className={`font-mono text-xs font-semibold shrink-0 ${type === 'winner' ? 'text-profit' : 'text-loss'}`}>
+        <div className={`font-mono text-xs font-bold shrink-0 transition-transform duration-200 ${isHovered ? 'scale-110' : ''} ${type === 'winner' ? 'text-profit' : 'text-loss'}`}>
           {type === 'winner' ? '+' : ''}{formatCurrency(client.pnl, true)}
         </div>
       </div>
     );
   };
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      {/* Winners */}
-      <div className="rounded-lg border border-border bg-gradient-card shadow-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <span className="text-profit">📈</span> Top Winners
-          </h3>
-          <span className="text-[10px] text-profit font-mono">{winners.length} clients</span>
-        </div>
-        <div className="py-1 max-h-[280px] overflow-y-auto scrollbar-thin">
-          {loading ? (
-            <div className="p-4 space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-6 rounded animate-shimmer" />)}</div>
-          ) : winners.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-xs">No profitable clients</div>
-          ) : (
-            winners.map(c => renderClient(c, 'winner'))
-          )}
-        </div>
+  const renderSection = (title: string, icon: React.ReactNode, clients: ClientPnL[], type: 'winner' | 'loser', colorClass: string, delay: string) => (
+    <div className="card-interactive overflow-hidden animate-slide-up" style={{ animationDelay: delay }}>
+      <div className="section-header">
+        <h3 className="section-title">
+          <div className={`w-6 h-6 rounded-md ${type === 'winner' ? 'bg-profit/15' : 'bg-loss/15'} flex items-center justify-center`}>
+            {icon}
+          </div>
+          {title}
+        </h3>
+        <span className={`text-[10px] font-mono font-semibold ${colorClass}`}>{clients.length} clients</span>
       </div>
+      <div className="py-1.5 max-h-[300px] overflow-y-auto scrollbar-thin">
+        {loading ? (
+          <div className="p-4 space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-8 animate-shimmer" style={{ animationDelay: `${i * 100}ms` }} />)}</div>
+        ) : clients.length === 0 ? (
+          <div className="p-10 text-center text-muted-foreground text-xs">
+            No {type === 'winner' ? 'profitable' : 'losing'} clients
+          </div>
+        ) : (
+          clients.map((c, idx) => renderClient(c, type, idx))
+        )}
+      </div>
+    </div>
+  );
 
-      {/* Losers */}
-      <div className="rounded-lg border border-border bg-gradient-card shadow-card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <span className="text-loss">📉</span> Top Losers
-          </h3>
-          <span className="text-[10px] text-loss font-mono">{losers.length} clients</span>
-        </div>
-        <div className="py-1 max-h-[280px] overflow-y-auto scrollbar-thin">
-          {loading ? (
-            <div className="p-4 space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-6 rounded animate-shimmer" />)}</div>
-          ) : losers.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-xs">No losing clients</div>
-          ) : (
-            losers.map(c => renderClient(c, 'loser'))
-          )}
-        </div>
-      </div>
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {renderSection('Top Winners', <TrendingUp className="h-3.5 w-3.5 text-profit" />, winners, 'winner', 'text-profit', '200ms')}
+      {renderSection('Top Losers', <TrendingDown className="h-3.5 w-3.5 text-loss" />, losers, 'loser', 'text-loss', '260ms')}
     </div>
   );
 };
